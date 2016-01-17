@@ -7,12 +7,21 @@
 #define EL128_BLOCK_SIZE 1024
 #define EL128_BLOCK_BYTES (EL128_BLOCK_SIZE * sizeof(uint64_t))
 
-// ln2 in base 2**64
+// 64 hex digits of ln 2
 
 #define EL128_A0 0xb17217f7d1cf79abULL
 #define EL128_B0 0xc9e3b39803f2f6afULL
 #define EL128_C0 0x40f343267298b62dULL
 #define EL128_D0 0x8a0d175b8baafa2bULL
+
+// 96 hex digits of euler's constant - 2
+
+#define XYZZY_0 0xb7e151628aed2a6aULL
+#define XYZZY_1 0xbf7158809cf4f3c7ULL
+#define XYZZY_2 0x62e7160f38b4da56ULL
+#define XYZZY_3 0xa784d9045190cfefULL
+#define XYZZY_4 0x324e7738926cfbe5ULL
+#define XYZZY_5 0xf4bf8d8d8c31d763ULL
 
 struct el128_t
 {
@@ -39,6 +48,8 @@ static void _el128_block(struct el128_t *el128)
 	int i;
 	uint64_t *X, A, B, C, D;
 
+//	fprintf(stderr, "** _el128_block(): bfilled = %d, bytes = %lu\n", el128->bfilled, el128->bytes);
+
 	X = el128->u64_block;
 	A = el128->A;
 	B = el128->B;
@@ -48,97 +59,67 @@ static void _el128_block(struct el128_t *el128)
 	for(i = 0; i < EL128_BLOCK_SIZE / 8; ++i)
 	{
 		A ^= (D << 7) + (D >> 11) + *X++;
-		B ^= A ^ *X++;
-		C ^= (B << 5) + (B >> 23) + *X++;
-		D ^= A + C + *X++;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= C;
-		C ^= B;
-		D ^= A ^ *X++;
-		A ^= (D << 12) + (D >> 5) + *X++;
-		B ^= A ^ *X++;
-		C ^= (B << 9) + (B >> 20) + *X++;
-		D ^= A;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A += D >> 13;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A += D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
-		A ^= D;
-		B ^= A;
-		C ^= B;
-		D ^= C;
+		B += A ^ *X++;
+		C += (B << 5) + (B >> 23) + *X++;
+		D += (A >> 6) + C + *X++;
+
+		A ^= (D << 27) + XYZZY_0;
+		B += A;	C += B;	D += C;
+
+		A ^= (D << 12) + (D >> 19);
+		B += A;
+		C += B;
+		D += C ^ *X++;
+
+		A ^= D >> 16;
+		B += A;	C += B;	D += C;
+
+		A ^= D >> 22;
+		B += A;	C += B;	D += C;
+
+		A ^= (D >> 13) + XYZZY_1;
+		B += A;	C += B;	D += C;
+
+		A ^= (D << 10) + (D >> 5) + *X++;
+		B += A ^ *X++;
+		C += (B << 9) + (B >> 20) + *X++;
+		D += C;
+
+		A ^= D >> 31;
+		B += A;	C += B;	D += C;
+
+		A ^= (D << 4) + XYZZY_2;
+		B += A;	C += B;	D += C;
+
+		A ^= D >> 7;
+		B += A;	C += B;	D += C;
+
+		A ^= D << 13;
+		B += A;	C += B;	D += C;
+
+		A ^= (D >> 5) + XYZZY_3;
+		B += A;	C += B;	D += C;
+
+		A ^= D >> 26;
+		B += A;	C += B;	D += C;
+
+		A ^= (D << 17);
+		B += A;	C += B;	D += C;
+
+		A ^= D >> 12;
+		B += A;	C += B;	D += C;
+
+		A ^= D >> 23;
+		B += A; C += B; D += C;
+
+		A ^= (D << 9) + XYZZY_4;
+		B += A;	C += B;	D += C;
+
+		A ^= D >> 18;
+		B += A;	C += B;	D += C;
+
+		A ^= (D << 21) + XYZZY_5;
+		B += A;	C += B;	D += C;
 	}
 	el128->A = A;
 	el128->B = D;
@@ -151,7 +132,9 @@ static void _el128_block(struct el128_t *el128)
 
 void el128_update(struct el128_t *el128, const char *data, int len)
 {
-	int ptr = 0, remain;
+	int ptr = 0;
+
+//	fprintf(stderr, "** el128_update(): bfilled = %d, len = %d\n", el128->bfilled, len);
 
 	// this is just stupid, but we'll allow it
 	
@@ -160,27 +143,30 @@ void el128_update(struct el128_t *el128, const char *data, int len)
 		return;
 	}
 
-	// special case; buffer non-empty
-
 	if (el128->bfilled)
 	{
-		remain = EL128_BLOCK_BYTES - el128->bfilled;
-		if (len >= remain)
-		{
-			// buffer the first remain bytes to fill up the block
-			memcpy(&el128->uc_block[el128->bfilled], data, remain);
-			_el128_block(el128);
-			len -= remain;
-			ptr += remain;
-		}
-		else
-		{
-			// buffer all len bytes of *data, without filling up to one block
-		
-			memcpy(&el128->uc_block[el128->bfilled], data, len);
-			el128->bfilled += len;
-			return; // all of the input consumed
-		}
+		// buffer non-empty
+		// this should not happen
+
+		assert(0);
+
+/*		remain = EL128_BLOCK_BYTES - el128->bfilled;*/
+/*		if (len >= remain)*/
+/*		{*/
+/*			// buffer the first remain bytes to fill up the previous block*/
+/*			memcpy(&el128->uc_block[el128->bfilled], data, remain);*/
+/*			_el128_block(el128);*/
+/*			len -= remain;*/
+/*			ptr += remain;*/
+/*		}*/
+/*		else*/
+/*		{*/
+/*			// buffer all len bytes of *data, without filling up to one block*/
+/*		*/
+/*			memcpy(&el128->uc_block[el128->bfilled], data, len);*/
+/*			el128->bfilled += len;*/
+/*			return; // all of the input consumed*/
+/*		}*/
 	}
 
 	// at this point the buffer will be empty
@@ -219,9 +205,11 @@ static void _el128_byte(struct el128_t *el128, unsigned char byte)
 void el128_finish(struct el128_t *el128, uint64_t checksum[2])
 {
 	uint64_t bytes;
-	
+
 	bytes = el128->bytes + el128->bfilled;
-	
+
+//	fprintf(stderr, "** el128_finish(): bfilled = %d, bytes = %lu\n", el128->bfilled, el128->bytes);
+		
 	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
 	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
 	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
@@ -230,6 +218,11 @@ void el128_finish(struct el128_t *el128, uint64_t checksum[2])
 	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
 	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
 	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
+
+	if (el128->bfilled)
+	{
+		_el128_byte(el128, 0x80);
+	}
 	
 	while (el128->bfilled)
 	{
@@ -249,16 +242,18 @@ void el128_start(struct el128_t *el128)
 	el128->bytes = 0;	
 }
 
+#define IOBUF_SIZE EL128_BLOCK_BYTES * 8
+
 int main(int argc, char **argv)
 {
 	int i, len, ret = 0;
 	char *buffer;
-	uint64_t checksum[2], c[2], x[2];
+	uint64_t checksum[2];
 	struct el128_t el128;
 	FILE *fp;
 
 	el128_init(&el128);	
-	buffer = malloc(65536);
+	buffer = malloc(IOBUF_SIZE);
 		
 	for (i = 1; i < argc; ++i)
 	{
@@ -266,7 +261,7 @@ int main(int argc, char **argv)
 		if (fp)
 		{
 			el128_start(&el128);
-			while ((len = fread(buffer, 1, 65536, fp)) > 0)
+			while ((len = fread(buffer, 1, IOBUF_SIZE, fp)) > 0)
 			{
 				el128_update(&el128, buffer, len);
 			}
@@ -274,20 +269,9 @@ int main(int argc, char **argv)
 			fclose(fp);
 			el128_finish(&el128, checksum);
 
-			if (i == 1)
-			{
-				c[0] = checksum[0];
-				c[1] = checksum[1];
-			}
-
-			x[0] = checksum[0] ^ c[0];
-			x[1] = checksum[1] ^ c[1];
-
-			printf("%08x-%08x-%08x-%08x [%08x-%08x-%08x-%08x] %s\n",
+			printf("%08x-%08x-%08x-%08x %s\n",
 				(int)(checksum[0] >> 32), (int)(checksum[0] & 0xffffffff),
 				(int)(checksum[1] >> 32), (int)(checksum[1] & 0xffffffff),
-				(int)(x[0] >> 32), (int)(x[0] & 0xffffffff),
-				(int)(x[1] >> 32), (int)(x[1] & 0xffffffff),
 				argv[i]);
 		}
 		else
