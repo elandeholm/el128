@@ -1,10 +1,19 @@
 #include <string.h>
 #include <stdio.h>
-#include <inttypes.h>
-#include <stdlib.h>
+#include <inttypes.h> // (u)int64_t
+#include <stdlib.h> // malloc()
 #include <assert.h>
+#include <sys/types.h> // stat()
+#include <sys/stat.h>
+#include <unistd.h>
+#include <time.h> // clock()
 
-#define EL128_BLOCK_SIZE 1024
+
+
+// el128 is a 128 bit hashing algorithm based on the Merkle-Damgård construction
+// el128 is designed to run fast, not to be cryptographically strong
+
+#define EL128_BLOCK_SIZE 128
 #define EL128_BLOCK_BYTES (EL128_BLOCK_SIZE * sizeof(uint64_t))
 
 // 64 hex digits of ln 2
@@ -48,13 +57,12 @@ static void _el128_block(struct el128_t *el128)
 	int i;
 	uint64_t *X, A, B, C, D;
 
-//	fprintf(stderr, "** _el128_block(): bfilled = %d, bytes = %lu\n", el128->bfilled, el128->bytes);
-
+//	fprintf(stderr, "_el128_block(), bytes=%lu\n", el128->bfilled + el128->bytes);
 	X = el128->u64_block;
 	A = el128->A;
 	B = el128->B;
 	C = el128->C;
-	D = el128->D;	
+	D = el128->D;
 
 	for(i = 0; i < EL128_BLOCK_SIZE / 8; ++i)
 	{
@@ -66,7 +74,7 @@ static void _el128_block(struct el128_t *el128)
 		A ^= (D << 27) + XYZZY_0;
 		B += A;	C += B;	D += C;
 
-		A ^= (D << 12) + (D >> 19);
+		A ^= ((D << 12) + (D >> 19)) | ~C;
 		B += A;
 		C += B;
 		D += C ^ *X++;
@@ -74,7 +82,7 @@ static void _el128_block(struct el128_t *el128)
 		A ^= D >> 16;
 		B += A;	C += B;	D += C;
 
-		A ^= D >> 22;
+		A ^= (D >> 22) | B;
 		B += A;	C += B;	D += C;
 
 		A ^= (D >> 13) + XYZZY_1;
@@ -100,13 +108,7 @@ static void _el128_block(struct el128_t *el128)
 		A ^= (D >> 5) + XYZZY_3;
 		B += A;	C += B;	D += C;
 
-		A ^= D >> 26;
-		B += A;	C += B;	D += C;
-
 		A ^= (D << 17);
-		B += A;	C += B;	D += C;
-
-		A ^= D >> 12;
 		B += A;	C += B;	D += C;
 
 		A ^= D >> 23;
@@ -121,11 +123,11 @@ static void _el128_block(struct el128_t *el128)
 		A ^= (D << 21) + XYZZY_5;
 		B += A;	C += B;	D += C;
 	}
-	el128->A = A;
-	el128->B = D;
-	el128->C = B;
-	el128->D = C;
-	
+	el128->A += A;
+	el128->B += D;
+	el128->C += B;
+	el128->D += C;
+
 	el128->bfilled = 0;
 	el128->bytes += EL128_BLOCK_BYTES;
 }
@@ -134,46 +136,18 @@ void el128_update(struct el128_t *el128, const char *data, int len)
 {
 	int ptr = 0;
 
-//	fprintf(stderr, "** el128_update(): bfilled = %d, len = %d\n", el128->bfilled, len);
-
 	// this is just stupid, but we'll allow it
-	
+
 	if (len == 0)
 	{
 		return;
 	}
 
-	if (el128->bfilled)
-	{
-		// buffer non-empty
-		// this should not happen
-
-		assert(0);
-
-/*		remain = EL128_BLOCK_BYTES - el128->bfilled;*/
-/*		if (len >= remain)*/
-/*		{*/
-/*			// buffer the first remain bytes to fill up the previous block*/
-/*			memcpy(&el128->uc_block[el128->bfilled], data, remain);*/
-/*			_el128_block(el128);*/
-/*			len -= remain;*/
-/*			ptr += remain;*/
-/*		}*/
-/*		else*/
-/*		{*/
-/*			// buffer all len bytes of *data, without filling up to one block*/
-/*		*/
-/*			memcpy(&el128->uc_block[el128->bfilled], data, len);*/
-/*			el128->bfilled += len;*/
-/*			return; // all of the input consumed*/
-/*		}*/
-	}
-
 	// at this point the buffer will be empty
 	// process as many whole blocks as we can
-	
-	//assert(el128->bfilled == 0);
-	
+
+	assert(el128->bfilled == 0);
+
 	while (len >= EL128_BLOCK_BYTES)
 	{
 		memcpy(el128->uc_block, &data[ptr], EL128_BLOCK_BYTES);
@@ -181,10 +155,10 @@ void el128_update(struct el128_t *el128, const char *data, int len)
 		len -= EL128_BLOCK_BYTES;
 		ptr += EL128_BLOCK_BYTES;
 	}
-	
+
 	// buffer the last len (< EL128_BLOCK_BYTES) remaining bytes
-	
-	//assert(el128->bfilled == 0);
+
+	assert(el128->bfilled == 0);
 
 	if (len)
 	{
@@ -208,28 +182,28 @@ void el128_finish(struct el128_t *el128, uint64_t checksum[2])
 
 	bytes = el128->bytes + el128->bfilled;
 
-//	fprintf(stderr, "** el128_finish(): bfilled = %d, bytes = %lu\n", el128->bfilled, el128->bytes);
-		
-	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
-	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
-	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
-	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
-	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
-	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
-	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
-	_el128_byte(el128, bytes & 0xff); bytes >>= 8;
+	// Merkle-Damgård compliant padding
 
-	if (el128->bfilled)
-	{
-		_el128_byte(el128, 0x80);
-	}
-	
-	while (el128->bfilled)
+	_el128_byte(el128, 0x80);
+
+	do
 	{
 		_el128_byte(el128, 0);
-	}
+	} while (el128->bfilled != (EL128_BLOCK_BYTES - 8));
+
+	_el128_byte(el128, (bytes & 0xff00000000000000ULL) >> 56);
+	_el128_byte(el128, (bytes & 0x00ff000000000000ULL) >> 48);
+	_el128_byte(el128, (bytes & 0x0000ff0000000000ULL) >> 40);
+	_el128_byte(el128, (bytes & 0x000000ff00000000ULL) >> 32);
+	_el128_byte(el128, (bytes & 0x00000000ff000000ULL) >> 24);
+	_el128_byte(el128, (bytes & 0x0000000000ff0000ULL) >> 16);
+	_el128_byte(el128, (bytes & 0x000000000000ff00ULL) >>  8);
+	_el128_byte(el128, (bytes & 0x00000000000000ffULL) >>  0);
+
 	checksum[0] = el128->C;
 	checksum[1] = el128->D;
+
+	assert (el128->bfilled == 0);
 }
 
 void el128_start(struct el128_t *el128)
@@ -239,51 +213,109 @@ void el128_start(struct el128_t *el128)
 	el128->C = EL128_C0;
 	el128->D = EL128_D0;
 	el128->bfilled = 0;
-	el128->bytes = 0;	
+	el128->bytes = 0;
 }
 
-#define IOBUF_SIZE EL128_BLOCK_BYTES * 8
+#define IOBUF_SIZE EL128_BLOCK_BYTES * 16
 
 int main(int argc, char **argv)
 {
-	int i, len, ret = 0;
+	int i, len;
 	char *buffer;
 	uint64_t checksum[2];
 	struct el128_t el128;
 	FILE *fp;
 
-	el128_init(&el128);	
+	el128_init(&el128);
 	buffer = malloc(IOBUF_SIZE);
-		
+
 	for (i = 1; i < argc; ++i)
 	{
-		fp = fopen(argv[i], "rb");
-		if (fp)
+		struct stat sb;
+
+		if (!strcmp(argv[i], "-t"))
 		{
+			int i, n;
+			char *tbuffer;
+			clock_t t_start, t_end;
+
+			tbuffer = calloc(EL128_BLOCK_BYTES, 1);
+
 			el128_start(&el128);
-			while ((len = fread(buffer, 1, IOBUF_SIZE, fp)) > 0)
+
+
+			n = 256 * 1024 * 1024;
+			fprintf(stderr, "%s, timing _el128_byte (%d)... ", argv[0], n);
+
+			t_start = clock();
+
+			for (i = 0; i < n; ++i)
 			{
-				el128_update(&el128, buffer, len);
+				_el128_byte(&el128, 0x00);
 			}
 
-			fclose(fp);
-			el128_finish(&el128, checksum);
+			t_end = clock();
 
-			printf("%08x-%08x-%08x-%08x %s\n",
-				(int)(checksum[0] >> 32), (int)(checksum[0] & 0xffffffff),
-				(int)(checksum[1] >> 32), (int)(checksum[1] & 0xffffffff),
-				argv[i]);
+			el128_start(&el128);
+
+			fprintf(stderr, "%f us\n", 1e+6 * (double)(t_end - t_start) / (double)(n * CLOCKS_PER_SEC));
+
+			n = 8 * 1024 * 1024;
+			fprintf(stderr, "%s, timing el128_update (%d)... ", argv[0], n);
+
+			t_start = clock();
+
+			for (i = 0; i < n; ++i)
+			{
+				el128_update(&el128, tbuffer, EL128_BLOCK_BYTES);
+			}
+
+			t_end = clock();
+
+			free(tbuffer);
+
+			fprintf(stderr, "%f us\n", 1e+6 * (double)(t_end - t_start) / (double)(n * CLOCKS_PER_SEC));
+		}
+		else if (-1 == lstat(argv[i], &sb))
+		{
+			fprintf(stderr, "%s: can't stat() \"%s\"\n", argv[0], argv[i]);
 		}
 		else
 		{
-			printf("**** : \"%s\" not found\n", argv[i]);
-			ret = -1;
-			goto early_fail;
+			if ((sb.st_mode & S_IFMT) != S_IFREG)
+			{
+				fprintf(stderr, "%s: not a regulat file \"%s\"\n", argv[0], argv[i]);
+			}
+			else
+			{
+				fp = fopen(argv[i], "rb");
+				if (fp)
+				{
+					el128_start(&el128);
+					while ((len = fread(buffer, 1, IOBUF_SIZE, fp)) > 0)
+					{
+						el128_update(&el128, buffer, len);
+					}
+
+					el128_finish(&el128, checksum);
+
+					printf("%08x-%08x-%08x-%08x %s\n",
+						(int)(checksum[0] >> 32), (int)(checksum[0] & 0xffffffff),
+						(int)(checksum[1] >> 32), (int)(checksum[1] & 0xffffffff),
+						argv[i]);
+
+					fclose(fp);
+				}
+				else
+				{
+					fprintf(stderr, "%s: file not found \"%s\"\n", argv[0], argv[i]);
+				}
+			}
 		}
 	}
 
-early_fail:
 	free(buffer);
 	el128_destroy(&el128);
-	return ret;
+
+	return 0;
 }
